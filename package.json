@@ -2,12 +2,9 @@
   "name": "demo_stagehand_v2",
   "version": "1.0.0",
   "description": "A simple demo of Stagehand v2 for browser automation",
-  "main": "target_cookie_search.ts",
+  "main": "target_shopping_list.ts",
   "scripts": {
-    "start": "tsx target_cookie_search.ts",
-    "product-info": "tsx examples/detailed_product_info.ts",
-    "compare": "tsx examples/product_comparison.ts",
-    "reviews": "tsx examples/extract_reviews.ts"
+    "start": "tsx target_shopping_list.ts"
   },
   "dependencies": {
     "@browserbasehq/stagehand": "^2.0.0",

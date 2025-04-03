@@ -1,6 +1,6 @@
-# Target Product Search Automation
+# Target Shopping List Automation
 
-This script automates searching for products on Target's website and adding them to the cart using Stagehand v2, a powerful browser automation framework.
+This script automates shopping on Target's website using Stagehand v2, a powerful browser automation framework. It processes a list of products, adds them to the cart, and proceeds to checkout.
 
 ## Prerequisites
 
@@ -27,77 +27,53 @@ This script automates searching for products on Target's website and adding them
    
    # Set to "true" to run in headless mode
    HEADLESS="false"
+   
+   # Target login credentials
+   Target_username="your_target_email"
+   Target_password="your_target_password"
    ```
 
-## Running the Scripts
+## Running the Script
 
-### Main Script
-
-To run the main script (search for cookies and add to cart):
+To run the shopping list automation:
 
 ```bash
 npm start
 ```
 
-### Example Scripts
-
-This project includes additional example scripts showing different Stagehand v2 capabilities:
-
-1. **Detailed Product Information**
-   
-   Searches for headphones and extracts comprehensive product details:
-
-   ```bash
-   npm run product-info
-   ```
-
-2. **Product Comparison**
-   
-   Compares multiple products (wireless earbuds and bluetooth headphones) and saves the results to a JSON file:
-
-   ```bash
-   npm run compare
-   ```
-
-3. **Product Reviews Extraction**
-   
-   Searches for smart watches, finds a product with reviews, and extracts detailed review data:
-
-   ```bash
-   npm run reviews
-   ```
-   
-   This example showcases:
-   - Advanced data extraction with nested schemas
-   - Review sentiment analysis (pros and cons)
-   - Data processing and results analysis
-   - Saving structured data to a JSON file
-
 ## Script Functionality
 
-The main script performs the following actions:
+The script performs the following actions:
 
-1. Navigates to the Target website (www.target.com)
-2. Searches for the configured product (default: "chocolate")
-3. Clicks on the first product in the search results
-4. Adds the product to the cart
-5. Navigates to the cart
-6. Extracts information about the item in the cart (name and quantity)
+1. Initializes a shopping list from products defined in `data/products.ts`
+2. Logs in to Target using credentials from the `.env` file
+3. Processes each product in the shopping list:
+   - Searches for the product on Target
+   - Checks if it's available
+   - Adds it to the cart if found
+   - Updates the shopping list with the status (added, not found, out of stock)
+4. Proceeds to checkout with the added items
+5. Provides a summary of the shopping results
 
 ## Customization Options
 
-### Changing the Search Term
+### Changing the Shopping List
 
-You can easily change what product to search for by modifying the `SEARCH_TERM` variable at the top of the `target_cookie_search.ts` file:
+You can easily modify the list of products to search for by editing the `productList` array in the `data/products.ts` file:
 
 ```typescript
-// Configuration - You can change these settings to customize the script
-const SEARCH_TERM = "chocolate"; // Change to "cookies", "toys", etc.
+export const productList = [
+  "chocolate chip cookies",
+  "milk",
+  "bread",
+  "bananas",
+  "coffee"
+];
 ```
 
 ### Choosing Between Local and Browserbase Execution
 
-You can explicitly control whether to run the browser locally or via Browserbase by setting the `USE_LOCAL_BROWSER` flag:
+You can explicitly control whether to run the browser locally or via Browserbase by setting the `USE_LOCAL_BROWSER` flag in `target_shopping_list.ts`:
 
 ```typescript
 // Set to true to run locally, false to use Browserbase

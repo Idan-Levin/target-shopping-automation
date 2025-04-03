@@ -1,0 +1,22 @@
+{
+  "name": "demo_stagehand_v2",
+  "version": "1.0.0",
+  "description": "A simple demo of Stagehand v2 for browser automation",
+  "main": "target_cookie_search.ts",
+  "scripts": {
+    "start": "tsx target_cookie_search.ts",
+    "product-info": "tsx examples/detailed_product_info.ts",
+    "compare": "tsx examples/product_comparison.ts",
+    "reviews": "tsx examples/extract_reviews.ts"
+  },
+  "dependencies": {
+    "@browserbasehq/stagehand": "^2.0.0",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "tsx": "^4.10.5",
+    "typescript": "^5.2.2"
+  }
+} 

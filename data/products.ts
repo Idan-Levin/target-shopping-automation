@@ -6,11 +6,8 @@
  */
 
 export const productList = [
-  "chocolate chip cookies",
-  "milk",
-  "bread",
-  "bananas",
-  "coffee"
+  "OREO Double Stuf Chocolate Sandwich Cookies",
+  "milk"
 ];
 
 /**

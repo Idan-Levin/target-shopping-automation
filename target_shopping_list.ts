@@ -1,9 +1,10 @@
 import dotenv from "dotenv";
 import { loginToTarget } from "./utils/target_login";
-import { searchAndAddToCart, proceedToCheckout } from "./utils/target_product";
+import { searchAndAddToCart } from "./utils/target_product";
 import { initializeStagehand, configFromEnv } from "./utils/stagehand_init";
 import { ShoppingList, ProductStatus } from "./utils/shopping_list";
 import { productList } from "./data/products";
+import { processCheckout, getPaymentDetailsFromEnv } from "./utils/target_checkout";
 
 // Load environment variables
 dotenv.config();
@@ -75,11 +76,20 @@ async function processShoppingList() {
     // Only proceed to checkout if at least one item was added
     if (summary.added > 0) {
       console.log("\nProceeding to checkout...");
-      const checkoutSuccess = await proceedToCheckout(stagehand);
+      
+      // Get payment details from environment variables
+      const paymentDetails = getPaymentDetailsFromEnv();
+      
+      // Process checkout with payment details
+      const checkoutSuccess = await processCheckout(stagehand, paymentDetails);
       
       if (checkoutSuccess) {
-        console.log("Successfully reached checkout page!");
-        console.log("(Purchase not completed to avoid actual transaction)");
+        console.log("Checkout process completed successfully!");
+        if (paymentDetails.completeOrder) {
+          console.log("Order has been placed!");
+        } else {
+          console.log("Order was not placed (COMPLETE_ORDER=false in .env)");
+        }
       } else {
         console.log("Failed to complete checkout process.");
       }

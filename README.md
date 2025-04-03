@@ -31,7 +31,16 @@ This script automates shopping on Target's website using Stagehand v2, a powerfu
    # Target login credentials
    Target_username="your_target_email"
    Target_password="your_target_password"
+   
+   # Payment details (for checkout)
+   CARD_NUMBER="4111111111111111"
+   CARD_EXPIRATION="12/25"
+   CARD_CVV="123"
+   CARD_NAME="John Doe"
+   COMPLETE_ORDER=false
    ```
+   
+   **Important**: The `COMPLETE_ORDER` option is set to `false` by default for safety. Set to `true` only if you want to actually place the order.
 
 ## Running the Script
 
@@ -52,7 +61,13 @@ The script performs the following actions:
    - Checks if it's available
    - Adds it to the cart if found
    - Updates the shopping list with the status (added, not found, out of stock)
-4. Proceeds to checkout with the added items
+4. Proceeds to checkout with the added items:
+   - Navigates to cart and ensures shipping is selected (not pickup)
+   - Proceeds to checkout
+   - Fills in payment information from the `.env` file
+   - Unchecks "Save payment card" options
+   - Clicks "Save and continue"
+   - Places the order only if `COMPLETE_ORDER=true` in the `.env` file
 5. Provides a summary of the shopping results
 
 ## Customization Options
@@ -94,17 +109,26 @@ HEADLESS="true"
 
 This setting affects local browser execution. When running via Browserbase, browsers always run in the cloud.
 
-### Using Browserbase
+### Payment and Checkout Options
 
-If you want to run the browser in the cloud using Browserbase:
+You can customize the checkout process by modifying the payment details in the `.env` file:
 
-1. Sign up for a Browserbase account and get your API key
-2. Add your Browserbase API key and project ID to the `.env` file
-3. Set `USE_LOCAL_BROWSER = false` in the script
-4. Run the script as normal
+```
+# Payment details (for checkout)
+CARD_NUMBER="4111111111111111"
+CARD_EXPIRATION="12/25"
+CARD_CVV="123"
+CARD_NAME="John Doe"
+COMPLETE_ORDER=false
+```
+
+By default, `COMPLETE_ORDER` is set to `false`, which means the script will go through the entire checkout process but will stop before placing the order. This is a safety feature to prevent accidental purchases.
+
+If you want to actually place the order, set `COMPLETE_ORDER=true`.
 
 ## Troubleshooting
 
 - If you encounter errors, make sure all environment variables are set correctly
 - For any "Element not found" errors, try increasing the wait times in the script
-- Make sure you have a stable internet connection 
+- Make sure you have a stable internet connection
+- If checkout fails, check that your payment details are entered correctly 

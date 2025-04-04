@@ -119,7 +119,7 @@ export async function searchAndAddToCart(
 export async function getCartInfo(stagehand: Stagehand): Promise<CartInfo> {
   // Go to cart
   await stagehand.page.act("Go to the cart");
-  await stagehand.page.waitForTimeout(3000); // Increased timeout for cart loading
+  await stagehand.page.waitForTimeout(1000); // Increased timeout for cart loading
   
   // Extract cart information
   const cartInfo = await stagehand.page.extract({

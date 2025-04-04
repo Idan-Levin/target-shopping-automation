@@ -41,17 +41,48 @@ export async function processCheckout(
     // Navigate to cart
     await stagehand.page.goto("https://www.target.com/cart");
     console.log("Navigated to cart");
+    await stagehand.page.waitForTimeout(5000);
+    
+    // Explicitly select shipping/delivery option
+    console.log("Selecting shipping/delivery option instead of pickup...");
+    await stagehand.page.act("Look for 'Shipping' or 'Delivery' option. There may be radio buttons for 'Order Pickup' and 'Same Day Delivery' or similar options. Click on the 'Same Day Delivery' or 'Shipping' option to select it.");
     await stagehand.page.waitForTimeout(3000);
     
-    // Ensure shipping is selected (not pickup)
-    console.log("Ensuring shipping option is selected...");
-    await stagehand.page.act("Look for shipping and pickup options. If pickup is selected, click on shipping to switch to shipping option.");
-    await stagehand.page.waitForTimeout(2000);
+    // Try to select shipping again with more specific instructions if needed
+    await stagehand.page.act("Look specifically for the 'Same Day Delivery' option. It might appear as '$9.99/delivery' or similar. Make sure this option is selected instead of 'Order Pickup'.");
+    await stagehand.page.waitForTimeout(3000);
     
-    // Click on checkout button
+    // Click on checkout button with specific instructions
     console.log("Proceeding to checkout...");
-    await stagehand.page.act("Find and click the 'Checkout' button");
-    await stagehand.page.waitForTimeout(5000);
+    await stagehand.page.act("Look for a red button that says 'Check out' or 'Continue to checkout' and click it. It's usually located in the order summary section on the right side of the page.");
+    await stagehand.page.waitForTimeout(8000);
+    
+    // Try the checkout button again if we're still on the cart page
+    const currentUrl = await stagehand.page.evaluate(() => window.location.href);
+    if (currentUrl.includes("/cart") && !currentUrl.includes("/checkout")) {
+      console.log("Still on cart page, trying checkout button again...");
+      await stagehand.page.act("Look for a button labeled 'Check out' in the order summary box. Click directly on this button. It should be a prominent red button.");
+      await stagehand.page.waitForTimeout(8000);
+    }
+    
+    // One more attempt with even more specific targeting
+    const stillOnCartPage = await stagehand.page.evaluate(() => window.location.href.includes("/cart"));
+    if (stillOnCartPage) {
+      console.log("Final attempt to click checkout button...");
+      await stagehand.page.evaluate(() => {
+        // Try to find and click the checkout button directly
+        const checkoutButtons = Array.from(document.querySelectorAll('button')).filter(button => 
+          button.textContent && button.textContent.toLowerCase().includes('check') && 
+          button.textContent.toLowerCase().includes('out')
+        );
+        if (checkoutButtons.length > 0) {
+          checkoutButtons[0].click();
+          return true;
+        }
+        return false;
+      });
+      await stagehand.page.waitForTimeout(8000);
+    }
     
     // Check if we're on the checkout page
     const isOnCheckoutPage = await stagehand.page.evaluate(() => {

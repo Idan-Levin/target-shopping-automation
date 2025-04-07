@@ -1,19 +1,28 @@
 {
-  "name": "demo_stagehand_v2",
+  "name": "target-shopping-automation",
   "version": "1.0.0",
-  "description": "A simple demo of Stagehand v2 for browser automation",
-  "main": "target_shopping_list.ts",
+  "description": "Target.com shopping automation with Stagehand",
+  "main": "dist/target_shopping_list.js",
   "scripts": {
-    "start": "tsx target_shopping_list.ts"
+    "build": "tsc",
+    "start": "node dist/target_shopping_list.js",
+    "dev": "ts-node target_shopping_list.ts",
+    "lint": "eslint *.ts utils/**/*.ts",
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
     "@browserbasehq/stagehand": "^2.0.0",
-    "dotenv": "^16.4.5",
-    "zod": "^3.23.8"
+    "dotenv": "^16.4.7",
+    "uuid": "^9.0.1",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/node": "^20.11.30",
-    "tsx": "^4.10.5",
-    "typescript": "^5.2.2"
+    "@types/node": "^20.17.30",
+    "@types/uuid": "^9.0.8",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18.x"
   }
-} 
+}

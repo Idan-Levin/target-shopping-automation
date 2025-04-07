@@ -1,0 +1,28 @@
+{
+  "wireless earbuds": {
+    "productName": "JLab GO Air Pop True Wireless Bluetooth Earbuds",
+    "brand": "JLab",
+    "price": "$24.99",
+    "rating": "4.3 out of 5 stars with 6145 ratings",
+    "keyFeatures": [
+      "Black",
+      "Lilac",
+      "Slate",
+      "Teal",
+      "+4 options"
+    ]
+  },
+  "bluetooth headphones": {
+    "productName": "JLab GO Air Pop True Wireless Bluetooth Earbuds",
+    "brand": "JLab",
+    "price": "$24.99",
+    "rating": "4.3 out of 5 stars with 6145 ratings",
+    "keyFeatures": [
+      "True Wireless",
+      "Bluetooth connectivity",
+      "Available in multiple colors: Black, Lilac, Slate, Teal +4 options",
+      "Ready for pickup within 2 hours",
+      "Shipping available"
+    ]
+  }
+}

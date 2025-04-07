@@ -6,8 +6,8 @@ A Node.js/TypeScript service that receives shopping lists from the Slack Shoppin
 
 The StageHand Agent serves as a bridge between:
 
-1. **Slack Shopping Agent** - A Node.js/TypeScript agent that manages a shopping list in Slack
-2. **BrowserBase** - A cloud browser automation service that handles the Target.com interactions
+1. **Slack Shopping Agent** - A Python agent that manages a shopping list in Slack
+2. **BrowserBase** - A platform for running headless browsers that provides the infrastructure for Target.com automation
 
 When an admin in Slack initiates the `/order-placed` command, the Slack agent exports the shopping list and sends it to the StageHand agent. StageHand then processes each item, adds them to the Target.com cart, and provides status updates in Slack. Once all items are processed, an admin can trigger the checkout process with a separate command.
 
@@ -16,16 +16,29 @@ When an admin in Slack initiates the `/order-placed` command, the Slack agent ex
 ```
 ┌─────────────────┐        ┌─────────────────┐        ┌─────────────────┐
 │  Slack          │        │  StageHand      │        │  BrowserBase    │
-│  Shopping Agent │ ──────▶│  Agent          │ ──────▶│  (Browser       │
-│  (Node.js)      │ ◀──────│  (Node.js)      │ ◀──────│  Automation)    │
-└─────────────────┘        └─────────────────┘        └─────────────────┘
+│  Shopping Agent │ ──────▶│  Agent          │ ──────▶│  (Headless      │
+│  (Python)       │ ◀──────│  (TypeScript)   │ ◀──────│  Browser        │
+└─────────────────┘        └─────────────────┘        │  Platform)      │
+                                                      └─────────────────┘
 ```
 
-The entire system is built with Node.js and TypeScript for consistency and type safety:
+The system is built with a combination of languages:
 
-1. **Slack Shopping Agent**: Handles user interactions in Slack
-2. **StageHand Agent**: Processes shopping lists and coordinates with BrowserBase
-3. **BrowserBase**: External service that performs the actual browser automation
+1. **Slack Shopping Agent**: Python-based agent that handles user interactions in Slack
+2. **StageHand Agent**: TypeScript service that processes shopping lists and coordinates with BrowserBase
+3. **BrowserBase**: Platform for running headless browsers that manages the infrastructure for web automation
+
+### About BrowserBase
+
+BrowserBase is a cloud platform that provides infrastructure for running headless browsers at scale. It offers:
+
+- **Framework Compatibility**: Native compatibility with Stagehand, Playwright, Puppeteer, and Selenium
+- **Observability**: Complete session visibility through Session Inspector and Session Replay
+- **Advanced Features**: Automatic captcha solving, residential proxies, browser extensions, and file management
+- **Long-running Sessions**: Support for persistent browser sessions
+- **Secure, Scalable Infrastructure**: For production-grade browser automation
+
+In this project, BrowserBase eliminates the need to maintain our own fleet of headless browsers and provides the reliability needed for automated shopping.
 
 ## Features
 
@@ -33,7 +46,7 @@ The entire system is built with Node.js and TypeScript for consistency and type 
 - Asynchronous processing of shopping lists
 - Real-time status updates to Slack
 - In-memory state management of shopping runs
-- Integration with BrowserBase for browser automation
+- Integration with BrowserBase for scalable browser automation
 - Two-phase checkout (add to cart, then explicit approval)
 
 ## API Endpoints
@@ -48,6 +61,8 @@ The entire system is built with Node.js and TypeScript for consistency and type 
 
 - Node.js 18+
 - BrowserBase account and API key
+  - Sign up at [BrowserBase](https://browserbase.io/)
+  - Create a project and obtain your API key and project ID
 - Target.com account
 - Slack Bot Token (for sending status updates)
 - Slack Shopping Agent integration
@@ -122,9 +137,9 @@ The Slack integration is optional. The StageHand agent will function properly ev
 
 ## Integration with Slack Shopping Agent
 
-The Slack Shopping Agent needs to be configured to call the StageHand agent:
+The Python-based Slack Shopping Agent needs to be configured to call the StageHand agent:
 
-1. Add these environment variables to the Slack agent:
+1. Add these environment variables to the Slack agent's Python environment:
    ```
    STAGEHAND_API_ENDPOINT=https://your-stagehand-render-app.onrender.com
    STAGEHAND_API_KEY=your_secret_api_key_here  # Same as API_KEY in StageHand
@@ -134,9 +149,9 @@ The Slack Shopping Agent needs to be configured to call the StageHand agent:
    - `/order-placed` - Triggers a new shopping run with the current shopping list
    - `/target-checkout <run_id>` - Initiates checkout for a completed shopping run
 
-3. The Slack app will need to call the StageHand API endpoints:
+3. The Python Slack app will need to call the StageHand API endpoints:
    - POST to `/trigger-shopping-run` when the `/order-placed` command is used
-   - POST to `/checkout/:runId` when the `/target-checkout` command is used
+   - POST to `/checkout/:runId` when the `/target-checkout <run_id>` command is used
 
 ## Error Handling
 

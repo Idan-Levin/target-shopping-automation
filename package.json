@@ -7,6 +7,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "start:script": "node dist/target_shopping_list.js",
+    "start:shopping": "node dist/target_shopping_list.js",
+    "start:checkout": "node dist/checkout_script.js",
     "dev": "ts-node target_shopping_list.ts",
     "dev:server": "ts-node server.ts",
     "lint": "eslint *.ts utils/**/*.ts",

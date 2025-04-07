@@ -2,114 +2,160 @@ import dotenv from "dotenv";
 import { loginToTarget } from "./utils/target_login";
 import { searchAndAddToCart } from "./utils/target_product";
 import { initializeStagehand, configFromEnv } from "./utils/stagehand_init";
-import { ShoppingList, ProductStatus } from "./utils/shopping_list";
+import { ShoppingList, ProductStatus, ShoppingItem } from "./utils/shopping_list";
 import { productList } from "./data/products";
 import { processCheckout, getPaymentDetailsFromEnv } from "./utils/target_checkout";
+import fs from "fs";
+import path from "path";
+
+// Fix run manager import to use absolute path
+// Import run manager functions with path resolved from current file location
+import { updateRunStatus, recordItemSuccess, recordItemFailure, getRun, RunData } from "./src/run_manager";
+// Import Slack integration
+import { sendRunStarted, sendItemAdded, sendItemFailed, sendCartReady, sendError } from "./src/slack";
+
+// Removed path debugging logs
 
 // Load environment variables
 dotenv.config();
 
-// Configuration - You can change these settings to customize the script
-const USE_LOCAL_BROWSER = true; // Set to false to use Browserbase (requires API keys)
+// Configuration
+const USE_LOCAL_BROWSER = process.env.STAGEHAND_LOCAL === 'true'; // Use env var
 
-// Get Target credentials from environment variables
-const TARGET_USERNAME = process.env.Target_username;
-const TARGET_PASSWORD = process.env.Target_password;
+// Target credentials
+const TARGET_USERNAME = process.env.TARGET_USERNAME;
+const TARGET_PASSWORD = process.env.TARGET_PASSWORD;
 
-async function processShoppingList() {
-  console.log("Starting Target shopping automation...");
-  console.log(`Running in ${USE_LOCAL_BROWSER ? "LOCAL" : "BROWSERBASE"} mode`);
-  
-  if (!TARGET_USERNAME || !TARGET_PASSWORD) {
-    console.warn("Warning: Target_username or Target_password not set in .env file. Will proceed without logging in.");
-  }
-  
-  // Initialize shopping list from products.ts
-  const shoppingList = new ShoppingList(productList);
-  console.log("Shopping list initialized:");
-  console.log(shoppingList.toString());
-  
-  // Create configuration and initialize Stagehand
-  const config = configFromEnv(USE_LOCAL_BROWSER);
-  const stagehand = await initializeStagehand(config);
-
-  try {
-    // Log in if credentials are provided
-    if (TARGET_USERNAME && TARGET_PASSWORD) {
-      const loginSuccessful = await loginToTarget(stagehand, TARGET_USERNAME, TARGET_PASSWORD);
-      if (loginSuccessful) {
-        console.log("Successfully logged in to Target account");
-      } else {
-        console.log("Login was not successful, continuing anyway");
-      }
-    }
-
-    // Process each item in the shopping list
-    const items = shoppingList.getAllItems();
-    
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      console.log(`\nProcessing item ${i + 1}/${items.length}: ${item.name}`);
-      
-      // Skip items that aren't pending
-      if (item.status !== ProductStatus.PENDING) {
-        console.log(`Skipping ${item.name} - already processed (Status: ${item.status})`);
-        continue;
-      }
-      
-      // Try to add the item to cart
-      console.log(`Attempting to add ${item.name} to cart...`);
-      const result = await searchAndAddToCart(stagehand, item.name);
-      
-      // Update shopping list with result
-      shoppingList.updateStatus(i, result.status, result.message);
-      
-      // Print updated shopping list after each item
-      console.log("\nUpdated shopping list:");
-      console.log(shoppingList.toString());
-    }
-    
-    // Get summary of what was added
-    const summary = shoppingList.getSummary();
-    console.log(`\nShopping complete! Added ${summary.added} out of ${summary.total} items.`);
-    
-    // Only proceed to checkout if at least one item was added
-    if (summary.added > 0) {
-      console.log("\nProceeding to checkout...");
-      
-      // Get payment details from environment variables
-      const paymentDetails = getPaymentDetailsFromEnv();
-      
-      // Process checkout with payment details
-      const checkoutSuccess = await processCheckout(stagehand, paymentDetails);
-      
-      if (checkoutSuccess) {
-        console.log("Checkout process completed successfully!");
-        if (paymentDetails.completeOrder) {
-          console.log("Order has been placed!");
-        } else {
-          console.log("Order was not placed (COMPLETE_ORDER=false in .env)");
+// Function to create shopping list from items array
+function createShoppingList(items: any[]): ShoppingList {
+    const shoppingList = new ShoppingList();
+    items.forEach(item => {
+        if (item && typeof item === 'object' && item.name) {
+            shoppingList.addProduct(item.name, item.quantity || 1);
         }
-      } else {
-        console.log("Failed to complete checkout process.");
-      }
-    } else {
-      console.log("No items were added to cart, skipping checkout.");
-    }
-    
-    console.log("\nTarget shopping automation completed!");
-  } catch (error) {
-    console.error("An error occurred:", error);
-  } finally {
-    // Close Stagehand
-    await stagehand.close();
-    console.log("Stagehand closed");
-  }
-  
-  // Final shopping list status
-  console.log("\nFinal shopping list status:");
-  console.log(shoppingList.toString());
+    });
+    return shoppingList;
 }
 
-// Run the script
-processShoppingList().catch(console.error); 
+async function processShoppingList(tempFilePath?: string, runId?: string) {
+    if (!runId) {
+        console.error("[ProcessList] Error: No runId provided.");
+        return;
+    }
+
+    console.log(`[ProcessList ${runId}] Starting automation (${USE_LOCAL_BROWSER ? "Local" : "Browserbase"})...`);
+
+    let itemsToProcess: any[] = [];
+
+    // Read initial state from temp file
+    if (tempFilePath && tempFilePath !== 'null' && fs.existsSync(tempFilePath)) {
+        try {
+            const scriptInput = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+            if (!scriptInput || !scriptInput.runData || !scriptInput.items) {
+                throw new Error("Invalid format in temp file.");
+            }
+            itemsToProcess = scriptInput.items;
+            console.log(`[ProcessList ${runId}] Loaded ${itemsToProcess.length} items from temp file.`);
+            fs.unlinkSync(tempFilePath); // Clean up temp file
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`[ProcessList ${runId}] Error loading temp file ${tempFilePath}:`, error);
+            await sendError(runId, `Failed to load data from temp file: ${errorMessage}`);
+            updateRunStatus(runId, 'processing_failed');
+            return;
+        }
+    } else {
+        console.error(`[ProcessList ${runId}] Error: Temp file path invalid or file missing.`);
+        await sendError(runId, "Temp file path invalid or missing.");
+        updateRunStatus(runId, 'processing_failed');
+        return;
+    }
+
+    // Check current state from run manager
+    const currentState = getRun(runId);
+    if (!currentState) {
+        console.error(`[ProcessList ${runId}] CRITICAL: Run data disappeared from state file.`);
+        // No reliable way to update status or send Slack message here
+        return;
+    }
+    if (currentState.status !== 'running') {
+        console.warn(`[ProcessList ${runId}] Expected status 'running', found '${currentState.status}'. Proceeding.`);
+    }
+
+    // Initialize shopping list
+    const shoppingList = createShoppingList(itemsToProcess);
+    if (itemsToProcess.length === 0) { // Handle case where items might be empty (e.g., from legacy /run)
+        console.warn(`[ProcessList ${runId}] No items provided, assuming default list (if any logic exists).`);
+        // Potentially load default list here if needed
+    }
+
+    console.log(`[ProcessList ${runId}] Shopping list created with ${shoppingList.getAllItems().length} items.`);
+    await sendRunStarted(runId, shoppingList.getAllItems().length); // Send start notification
+
+    // Initialize Stagehand
+    const config = configFromEnv(USE_LOCAL_BROWSER);
+    const stagehand = await initializeStagehand(config);
+
+    try {
+        // Login
+        if (TARGET_USERNAME && TARGET_PASSWORD) {
+            const loginSuccessful = await loginToTarget(stagehand, TARGET_USERNAME, TARGET_PASSWORD);
+            console.log(`[ProcessList ${runId}] Target login attempt: ${loginSuccessful ? 'Success' : 'Failed/Skipped'}`);
+        }
+
+        // Process items
+        const items = shoppingList.getAllItems();
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            console.log(`[ProcessList ${runId}] Processing item ${i + 1}/${items.length}: ${item.name}`);
+            if (item.status !== ProductStatus.PENDING) continue; // Skip already processed
+
+            const result = await searchAndAddToCart(stagehand, item.name);
+            shoppingList.updateStatus(i, result.status, result.message);
+
+            if (result.status === ProductStatus.ADDED) {
+                recordItemSuccess(runId);
+                await sendItemAdded(runId, item.name, i + 1, items.length);
+            } else {
+                recordItemFailure(runId, result.message || 'Unknown error');
+                await sendItemFailed(runId, item.name, result.message || 'Unknown error');
+            }
+            console.log(`[ProcessList ${runId}] Item ${item.name} status: ${result.status}`);
+        }
+
+        // Finalize run
+        const summary = shoppingList.getSummary();
+        console.log(`[ProcessList ${runId}] Shopping complete. Added ${summary.added}/${summary.total}.`);
+        updateRunStatus(runId, 'cart_ready');
+        await sendCartReady(runId, summary.added, summary.total);
+
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[ProcessList ${runId}] Error during processing:`, error);
+        updateRunStatus(runId, 'processing_failed');
+        await sendError(runId, `Processing error: ${errorMessage}`);
+    } finally {
+        await stagehand.close();
+        console.log(`[ProcessList ${runId}] Stagehand closed.`);
+    }
+
+    // Final log
+    const finalRunData = getRun(runId);
+    console.log(`[ProcessList ${runId}] Final Run Status: ${finalRunData?.status || 'Unknown'}, Success: ${finalRunData?.successCount || 0}, Failures: ${finalRunData?.failureCount || 0}`);
+}
+
+// --- Script Execution --- //
+
+const tempFilePathArg = process.argv[2];
+const runIdArg = process.argv[3];
+
+processShoppingList(tempFilePathArg, runIdArg).catch((error: unknown) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[ProcessList] Unhandled fatal error:", error);
+    // Attempt to mark run as failed if possible
+    if (runIdArg) {
+        try { updateRunStatus(runIdArg, 'processing_failed'); } catch {} 
+        try { sendError(runIdArg, `Fatal script error: ${errorMessage}`); } catch {}
+    }
+    process.exit(1); // Ensure script exits on fatal error
+}); 

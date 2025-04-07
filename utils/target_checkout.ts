@@ -1,4 +1,7 @@
 import { Stagehand } from "@browserbasehq/stagehand";
+import { updateRunStatus } from "../src/run_manager"; // Adjust path relative to utils
+import { sendSlackUpdate, sendError } from "../src/slack"; // Uncommented Slack import
+// import { sendSlackUpdate, sendError } from "../src/slack"; // Uncomment when Slack is ready
 
 /**
  * Payment details interface for checkout process
@@ -27,24 +30,29 @@ export function getPaymentDetailsFromEnv(): PaymentDetails {
 
 /**
  * Processes checkout on Target.com with the given payment details
+ * @param runId - The ID of the shopping run
  * @param stagehand - Initialized Stagehand instance
  * @param paymentDetails - Payment card details for checkout
  * @returns Promise<boolean> - Whether checkout was completed successfully
  */
 export async function processCheckout(
+  runId: string, // Added runId parameter
   stagehand: Stagehand,
   paymentDetails: PaymentDetails
 ): Promise<boolean> {
+  // Ensure status is checkout_started (redundant check, server should handle)
+  // updateRunStatus(runId, 'checkout_started'); 
+  console.log(`[Checkout ${runId}] Starting checkout process...`);
+  await sendSlackUpdate(runId, "🚀 Starting checkout..."); // Uncommented for Slack
+
   try {
-    console.log("Starting checkout process...");
-    
     // Navigate to cart
     await stagehand.page.goto("https://www.target.com/cart");
-    console.log("Navigated to cart");
+    console.log(`[Checkout ${runId}] Navigated to cart`);
     await stagehand.page.waitForTimeout(5000);
     
     // Explicitly select shipping/delivery option
-    console.log("Selecting shipping/delivery option instead of pickup...");
+    console.log(`[Checkout ${runId}] Selecting shipping/delivery option...`);
     await stagehand.page.act("Look for 'Shipping' or 'Delivery' option. There may be radio buttons for 'Order Pickup' and 'Same Day Delivery' or similar options. Click on the 'Same Day Delivery' or 'Shipping' option to select it.");
     await stagehand.page.waitForTimeout(3000);
     
@@ -53,14 +61,14 @@ export async function processCheckout(
     await stagehand.page.waitForTimeout(3000);
     
     // Click on checkout button with specific instructions
-    console.log("Proceeding to checkout...");
+    console.log(`[Checkout ${runId}] Proceeding to checkout...`);
     await stagehand.page.act("Look for a red button that says 'Check out' or 'Continue to checkout' and click it. It's usually located in the order summary section on the right side of the page.");
     await stagehand.page.waitForTimeout(8000);
     
     // Try the checkout button again if we're still on the cart page
     const currentUrl = await stagehand.page.evaluate(() => window.location.href);
     if (currentUrl.includes("/cart") && !currentUrl.includes("/checkout")) {
-      console.log("Still on cart page, trying checkout button again...");
+      console.log(`[Checkout ${runId}] Still on cart page, trying checkout button again...`);
       await stagehand.page.act("Look for a button labeled 'Check out' in the order summary box. Click directly on this button. It should be a prominent red button.");
       await stagehand.page.waitForTimeout(8000);
     }
@@ -68,7 +76,7 @@ export async function processCheckout(
     // One more attempt with even more specific targeting
     const stillOnCartPage = await stagehand.page.evaluate(() => window.location.href.includes("/cart"));
     if (stillOnCartPage) {
-      console.log("Final attempt to click checkout button...");
+      console.log(`[Checkout ${runId}] Final attempt to click checkout button...`);
       await stagehand.page.evaluate(() => {
         // Try to find and click the checkout button directly
         const checkoutButtons = Array.from(document.querySelectorAll('button')).filter(button => 
@@ -90,19 +98,19 @@ export async function processCheckout(
     });
     
     if (!isOnCheckoutPage) {
-      console.log("Failed to reach checkout page");
+      console.log(`[Checkout ${runId}] Failed to reach checkout page`);
       return false;
     }
     
-    console.log("Successfully reached checkout page");
+    console.log(`[Checkout ${runId}] Successfully reached checkout page`);
     
     // Select payment method (credit card)
-    console.log("Selecting credit card payment method...");
+    console.log(`[Checkout ${runId}] Selecting credit card payment method...`);
     await stagehand.page.act("Find the 'Pay with Credit Card' option and click on the circle button to select it");
     await stagehand.page.waitForTimeout(2000);
     
     // Fill in credit card details
-    console.log("Filling in credit card details...");
+    console.log(`[Checkout ${runId}] Filling in credit card details...`);
     
     // Card number
     await stagehand.page.act(`Find the credit card number field and enter "${paymentDetails.cardNumber}"`);
@@ -121,34 +129,42 @@ export async function processCheckout(
     await stagehand.page.waitForTimeout(1000);
     
     // Uncheck "Save payment card to account" if it's checked
-    console.log("Ensuring 'Save payment card' is not checked...");
+    console.log(`[Checkout ${runId}] Ensuring 'Save payment card' is not checked...`);
     await stagehand.page.act("If 'Save payment card to account' checkbox is checked, click it to uncheck");
     await stagehand.page.waitForTimeout(1000);
     
     // Uncheck "Save as default payment card" if it's checked
-    console.log("Ensuring 'Save as default payment card' is not checked...");
+    console.log(`[Checkout ${runId}] Ensuring 'Save as default payment card' is not checked...`);
     await stagehand.page.act("If 'Save as default payment card' checkbox is checked, click it to uncheck");
     await stagehand.page.waitForTimeout(1000);
     
     // Click "Save and continue" button
-    console.log("Clicking 'Save and continue'...");
+    console.log(`[Checkout ${runId}] Clicking 'Save and continue'...`);
     await stagehand.page.act("Find and click the 'Save and continue' button");
     await stagehand.page.waitForTimeout(5000);
     
     // Check if we should complete the order
     if (paymentDetails.completeOrder) {
-      console.log("Completing order...");
+      console.log(`[Checkout ${runId}] Completing order...`);
       await stagehand.page.act("Find and click the 'Place your order' button");
       await stagehand.page.waitForTimeout(5000);
-      console.log("Order placed successfully!");
+      console.log(`[Checkout ${runId}] Order placed successfully!`);
+      updateRunStatus(runId, 'checkout_complete');
+      await sendSlackUpdate(runId, "✅ Order placed successfully!"); // Uncommented for Slack
     } else {
-      console.log("Order not completed (COMPLETE_ORDER=false)");
-      console.log("Checkout process stopped before placing the order");
+      console.log(`[Checkout ${runId}] Order not completed (COMPLETE_ORDER=false)`);
+      console.log(`[Checkout ${runId}] Checkout process stopped before placing the order`);
+      // Set status to complete even if order wasn't placed, as the process finished as intended
+      updateRunStatus(runId, 'checkout_complete'); 
+      await sendSlackUpdate(runId, "✅ Checkout simulation complete (order not placed)."); // Uncommented for Slack
     }
     
     return true;
   } catch (error) {
-    console.error("Error during checkout:", error);
+    console.error(`[Checkout ${runId}] Error during checkout:`, error);
+    updateRunStatus(runId, 'checkout_failed');
+    const errorMsg = error instanceof Error ? error.message : "Unknown checkout error";
+    await sendError(runId, `Checkout failed: ${errorMsg}`); // Uncommented for Slack
     return false;
   }
 } 

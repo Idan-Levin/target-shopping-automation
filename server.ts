@@ -15,6 +15,7 @@ const { sendRunStarted, sendSlackUpdate, sendError } = require('./src/slack');
 
 // Define types for Express request/response
 import { Request, Response, NextFunction } from 'express';
+import { handleTargetCheckoutCommand, verifySlackRequest } from './src/slack_commands';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -170,6 +171,54 @@ app.post('/checkout/:runId', validateApiKey, async (req: Request, res: Response)
         await sendError(runId, error instanceof Error ? error.message : 'Failed to launch checkout process.');
         res.status(500).json({ error: 'Internal Server Error', message: 'Failed to launch checkout process.' });
     }
+});
+
+/**
+ * Slack webhook endpoint for handling slash commands
+ */
+app.post('/slack/commands', async (req: Request, res: Response) => {
+  try {
+    // Verify the request is coming from Slack
+    // Slack sends these headers with each request
+    const slackSignature = req.headers['x-slack-signature'] as string;
+    const slackTimestamp = req.headers['x-slack-request-timestamp'] as string;
+    
+    // Only verify in production
+    if (process.env.NODE_ENV === 'production') {
+      const isValidRequest = verifySlackRequest(
+        process.env.SLACK_SIGNING_SECRET || '',
+        slackSignature,
+        slackTimestamp,
+        JSON.stringify(req.body)
+      );
+      
+      if (!isValidRequest) {
+        console.error('[Slack] Invalid request signature');
+        return res.status(401).json({ error: 'Invalid request signature' });
+      }
+    }
+    
+    // Handle different slash commands
+    switch (req.body.command) {
+      case '/target-checkout':
+        const response = await handleTargetCheckoutCommand(req.body);
+        return res.json(response);
+      
+      // Add other commands as needed
+      
+      default:
+        return res.json({
+          response_type: 'ephemeral',
+          text: 'Unknown command'
+        });
+    }
+  } catch (error) {
+    console.error('[Slack] Error handling slack command:', error);
+    return res.status(500).json({
+      response_type: 'ephemeral',
+      text: 'Internal server error'
+    });
+  }
 });
 
 // Start the server

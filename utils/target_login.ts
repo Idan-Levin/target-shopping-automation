@@ -1,8 +1,7 @@
 import { Page } from 'playwright';
-// Try different import styles for Stagehand SDK
-// import { Stagehand } from '@stagehand/sdk'; 
-// import Stagehand from '@stagehand/sdk'; // Try default import
-const { Stagehand } = require('@stagehand/sdk'); // Try require
+// Use the correct package name for the import
+import { Stagehand } from '@browserbasehq/stagehand'; 
+// const { Stagehand } = require('@stagehand/sdk'); // Remove incorrect require
 
 // Basic console logger as fallback
 const logger = {
@@ -19,43 +18,44 @@ const logger = {
  * @param password - The Target password.
  * @returns True if login appears successful, False otherwise.
  */
-export async function loginToTarget(stagehand: typeof Stagehand, username: string, password: string): Promise<boolean> {
+export async function loginToTarget(stagehand: Stagehand, username: string, password: string): Promise<boolean> {
     if (!stagehand || !stagehand.page) {
         logger.error('Stagehand or Stagehand page is not initialized!');
         return false;
     }
+    // Use the underlying Playwright page object for actions
     const page: Page = stagehand.page;
     logger.info('Attempting to log in to Target account...');
 
     try {
-        // Navigate to the main login page
-        await stagehand.navigate('https://www.target.com/account');
+        // Navigate using the page object
+        await page.goto('https://www.target.com/account');
         logger.info('Navigated to Target account page');
 
         // --- Step 1: Enter Username/Email --- 
         const usernameSelector = '#username'; // Common ID for username/email input
-        await stagehand.waitForSelector(usernameSelector, { timeout: 10000 });
+        await page.waitForSelector(usernameSelector, { timeout: 10000 });
         logger.info('Username field located');
-        await stagehand.type(usernameSelector, username);
+        await page.type(usernameSelector, username);
         logger.info('Entered email address.');
 
         // --- Step 2: Click Continue --- 
         const continueButtonSelector = 'button[type="submit"]:has-text("Continue"), button[data-test="accountNav-continue"]' ;
-        await stagehand.waitForSelector(continueButtonSelector, { timeout: 5000 });
-        await stagehand.click(continueButtonSelector);
+        await page.waitForSelector(continueButtonSelector, { timeout: 5000 });
+        await page.click(continueButtonSelector);
         logger.info('Clicked Continue button.');
 
         // --- Step 3: Enter Password --- 
         const passwordSelector = '#password'; // Common ID for password input
-        await stagehand.waitForSelector(passwordSelector, { timeout: 15000 });
+        await page.waitForSelector(passwordSelector, { timeout: 15000 });
         logger.info('Password field located');
-        await stagehand.type(passwordSelector, password);
+        await page.type(passwordSelector, password);
         logger.info('Entered password.');
 
         // --- Step 4: Click Sign In --- 
         const signInButtonSelector = 'button[type="submit"]:has-text("Sign in"), button[data-test="accountNav-signIn"]' ;
-        await stagehand.waitForSelector(signInButtonSelector, { timeout: 5000 });
-        await stagehand.click(signInButtonSelector);
+        await page.waitForSelector(signInButtonSelector, { timeout: 5000 });
+        await page.click(signInButtonSelector);
         logger.info('Clicked Sign In button.');
 
         // --- Step 5: Verify Login Success --- 

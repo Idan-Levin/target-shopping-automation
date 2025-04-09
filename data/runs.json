@@ -1,4 +1,18 @@
 {
+  "test_run_123": {
+    "id": "test_run_123",
+    "status": "cart_ready",
+    "items": [
+      {
+        "name": "Paper towels",
+        "quantity": 1
+      }
+    ],
+    "timestamp": 1683900000000,
+    "successCount": 1,
+    "failureCount": 0,
+    "failureReasons": []
+  },
   "run_m9755am792643f13": {
     "id": "run_m9755am792643f13",
     "items": [

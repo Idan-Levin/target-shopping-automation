@@ -1,88 +1,95 @@
+import { WebClient } from '@slack/web-api';
 import dotenv from 'dotenv';
+
+// Basic console logger
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 // Load environment variables
 dotenv.config();
 
-// Get Slack settings from environment variables
-const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
-const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID;
+const slackToken = process.env.SLACK_BOT_TOKEN;
+const targetChannelId = process.env.SLACK_CHANNEL_ID; // Use the main channel ID
+// const adminChannelId = process.env.ADMIN_SLACK_CHANNEL_ID; // Removed Admin Channel ID
 
-// Check if Slack is properly configured
-const isSlackConfigured = !!SLACK_BOT_TOKEN && !!SLACK_CHANNEL_ID;
-
-/**
- * Send a message to Slack
- * @param message The message text to send
- */
-async function sendSlackMessage(message: string): Promise<void> {
-  if (!isSlackConfigured) {
-    console.log(`Slack message (not sent): ${message}`);
-    return;
-  }
-
-  try {
-    const response = await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`
-      },
-      body: JSON.stringify({
-        channel: SLACK_CHANNEL_ID,
-        text: message
-      })
-    });
-
-    const data = await response.json();
-    
-    if (!data.ok) {
-      console.error(`Error sending Slack message: ${data.error}`);
-    } else {
-      console.log('Slack message sent successfully');
+let client: WebClient | null = null; // Allow client to be null initially
+if (slackToken) {
+    try {
+        client = new WebClient(slackToken);
+        logger.info('Slack client initialized successfully.');
+    } catch (error) {
+        logger.error('Failed to initialize Slack client:', error);
+        client = null;
     }
-  } catch (error) {
-    console.error('Failed to send Slack message:', error);
-  }
+} else {
+    logger.warn('SLACK_BOT_TOKEN not found. Slack notifications will be disabled.');
 }
 
-/**
- * Send notification when a shopping run starts
- */
-export async function sendRunStarted(runId: string, itemCount: number): Promise<void> {
-  await sendSlackMessage(`🛒 Started shopping run *${runId}* with ${itemCount} items`);
+async function sendSlackMessage(message: string) {
+    // Use the single configured targetChannelId
+    if (!client) {
+        logger.warn(`Slack notification skipped (client not initialized): ${message}`);
+        return;
+    }
+    if (!targetChannelId) {
+        logger.warn(`Slack notification skipped (no SLACK_CHANNEL_ID configured): ${message}`);
+        return;
+    }
+
+    try {
+        // Send PUBLICLY to the target channel
+        await client.chat.postMessage({
+            channel: targetChannelId, 
+            text: message
+        });
+        logger.info(`Sent Slack message to channel ${targetChannelId}`);
+    } catch (error: unknown) { 
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'slack_webapi_platform_error' && 'data' in error) {
+            const slackError = error as { code: string; data: { error: string } }; 
+            logger.error(`Slack API Error sending to ${targetChannelId}: ${slackError.data.error}`);
+        } else if (error instanceof Error) {
+            logger.error(`Error sending Slack message to ${targetChannelId}: ${error.message}`);
+        } else {
+            logger.error(`Unknown error sending Slack message to ${targetChannelId}: ${error}`);
+        }
+    }
 }
 
-/**
- * Send notification when an item is added to cart
- */
-export async function sendItemAdded(runId: string, itemName: string, current: number, total: number): Promise<void> {
-  await sendSlackMessage(`✅ Added *${itemName}* to cart (${current}/${total}) for run *${runId}*`);
+// --- Specific Notification Functions --- // 
+// These remain unchanged
+
+export async function sendRunStarted(runId: string, itemCount: number) {
+    await sendSlackMessage(`:shopping_trolley: Started shopping run ${runId} with ${itemCount} items`);
 }
 
-/**
- * Send notification when an item fails to be added
- */
-export async function sendItemFailed(runId: string, itemName: string, reason: string): Promise<void> {
-  await sendSlackMessage(`❌ Failed to add *${itemName}* to cart for run *${runId}*: ${reason}`);
+export async function sendItemAdded(runId: string, itemName: string, itemIndex: number, totalItems: number) {
+    await sendSlackMessage(`:white_check_mark: Added ${itemName} to cart (${itemIndex}/${totalItems}) for run ${runId}`);
 }
 
-/**
- * Send notification when cart is ready for checkout
- */
-export async function sendCartReady(runId: string, successCount: number, totalCount: number): Promise<void> {
-  await sendSlackMessage(`🛍️ Shopping complete for run *${runId}*! Added ${successCount} out of ${totalCount} items. Ready for checkout.`);
+export async function sendItemFailed(runId: string, itemName: string, reason: string) {
+    await sendSlackMessage(`:x: Failed to add ${itemName} to cart for run ${runId}:\n${reason || 'Unknown error'}`);
 }
 
-/**
- * Send general update message
- */
-export async function sendSlackUpdate(runId: string, message: string): Promise<void> {
-  await sendSlackMessage(`[Run *${runId}*] ${message}`);
+export async function sendCartReady(runId: string, addedCount: number, totalCount: number) {
+    await sendSlackMessage(`:shopping_bags: Shopping complete for run ${runId}! Added ${addedCount} out of ${totalCount} items. Ready for checkout.`);
 }
 
-/**
- * Send error notification
- */
-export async function sendError(runId: string, errorMessage: string): Promise<void> {
-  await sendSlackMessage(`⚠️ Error in run *${runId}*: ${errorMessage}`);
+export async function sendCheckoutInitiated(runId: string) {
+    await sendSlackMessage(`[Run ${runId}] :memo: Checkout initiated through API.`);
+}
+
+export async function sendCheckoutComplete(runId: string) {
+    await sendSlackMessage(`[Run ${runId}] :tada: Checkout completed successfully!`);
+}
+
+export async function sendCheckoutFailed(runId: string, reason: string) {
+    await sendSlackMessage(`[Run ${runId}] :x: Checkout failed:\n${reason || 'Unknown error'}`);
+}
+
+export async function sendError(runId: string, errorMessage: string) {
+    // Debug messages will also be sent to the public channel
+    await sendSlackMessage(`:warning: Error in run ${runId}: ${errorMessage}`);
 } 

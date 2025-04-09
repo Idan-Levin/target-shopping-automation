@@ -12,7 +12,7 @@ import path from "path";
 // Import run manager functions with path resolved from current file location
 import { updateRunStatus, recordItemSuccess, recordItemFailure, getRun, RunData } from "./src/run_manager";
 // Import Slack integration
-import { sendRunStarted, sendItemAdded, sendItemFailed, sendCartReady, sendError } from "./src/slack";
+import { /* sendRunStarted, */ sendItemAdded, sendItemFailed, sendCartReady, sendError } from "./src/slack"; // Commented out sendRunStarted
 
 // Removed path debugging logs
 
@@ -25,6 +25,16 @@ const USE_LOCAL_BROWSER = process.env.STAGEHAND_LOCAL === 'true'; // Use env var
 // Target credentials
 const TARGET_USERNAME = process.env.TARGET_USERNAME;
 const TARGET_PASSWORD = process.env.TARGET_PASSWORD;
+
+// Enhanced debugging
+console.log("[DEBUG] Environment check:");
+console.log(`[DEBUG] USE_LOCAL_BROWSER: ${USE_LOCAL_BROWSER}`);
+console.log(`[DEBUG] TARGET_USERNAME set: ${!!TARGET_USERNAME}`);
+console.log(`[DEBUG] TARGET_PASSWORD set: ${!!TARGET_PASSWORD}`);
+console.log(`[DEBUG] OPENAI_API_KEY set: ${!!process.env.OPENAI_API_KEY}`);
+console.log(`[DEBUG] BROWSERBASE_API_KEY set: ${!!process.env.BROWSERBASE_API_KEY}`);
+console.log(`[DEBUG] BROWSERBASE_PROJECT_ID set: ${!!process.env.BROWSERBASE_PROJECT_ID}`);
+console.log(`[DEBUG] Current directory: ${process.cwd()}`);
 
 // Function to create shopping list from items array
 function createShoppingList(items: any[]): ShoppingList {
@@ -44,18 +54,27 @@ async function processShoppingList(tempFilePath?: string, runId?: string) {
     }
 
     console.log(`[ProcessList ${runId}] Starting automation (${USE_LOCAL_BROWSER ? "Local" : "Browserbase"})...`);
+    await sendError(runId, `DEBUG: Starting automation (${USE_LOCAL_BROWSER ? "Local" : "Browserbase"})...`);
 
     let itemsToProcess: any[] = [];
 
     // Read initial state from temp file
     if (tempFilePath && tempFilePath !== 'null' && fs.existsSync(tempFilePath)) {
         try {
-            const scriptInput = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+            console.log(`[DEBUG ${runId}] Reading temp file: ${tempFilePath}`);
+            const tempFileContent = fs.readFileSync(tempFilePath, 'utf8');
+            console.log(`[DEBUG ${runId}] Temp file content (first 100 chars): ${tempFileContent.substring(0, 100)}...`);
+            
+            const scriptInput = JSON.parse(tempFileContent);
             if (!scriptInput || !scriptInput.runData || !scriptInput.items) {
                 throw new Error("Invalid format in temp file.");
             }
             itemsToProcess = scriptInput.items;
             console.log(`[ProcessList ${runId}] Loaded ${itemsToProcess.length} items from temp file.`);
+            await sendError(runId, `DEBUG: Loaded ${itemsToProcess.length} items from temp file.`);
+            
+            console.log(`[DEBUG ${runId}] Items to process: ${JSON.stringify(itemsToProcess)}`);
+            
             fs.unlinkSync(tempFilePath); // Clean up temp file
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -66,7 +85,7 @@ async function processShoppingList(tempFilePath?: string, runId?: string) {
         }
     } else {
         console.error(`[ProcessList ${runId}] Error: Temp file path invalid or file missing.`);
-        await sendError(runId, "Temp file path invalid or missing.");
+        await sendError(runId, `DEBUG: Temp file path invalid or missing: ${tempFilePath}`);
         updateRunStatus(runId, 'processing_failed');
         return;
     }
@@ -75,68 +94,103 @@ async function processShoppingList(tempFilePath?: string, runId?: string) {
     const currentState = getRun(runId);
     if (!currentState) {
         console.error(`[ProcessList ${runId}] CRITICAL: Run data disappeared from state file.`);
+        await sendError(runId, `DEBUG: CRITICAL: Run data disappeared from state file.`);
         // No reliable way to update status or send Slack message here
         return;
     }
     if (currentState.status !== 'running') {
         console.warn(`[ProcessList ${runId}] Expected status 'running', found '${currentState.status}'. Proceeding.`);
+        await sendError(runId, `DEBUG: Expected status 'running', found '${currentState.status}'. Proceeding.`);
     }
 
     // Initialize shopping list
     const shoppingList = createShoppingList(itemsToProcess);
     if (itemsToProcess.length === 0) { // Handle case where items might be empty (e.g., from legacy /run)
         console.warn(`[ProcessList ${runId}] No items provided, assuming default list (if any logic exists).`);
-        // Potentially load default list here if needed
+        await sendError(runId, `DEBUG: No items provided, assuming default list.`);
     }
 
     console.log(`[ProcessList ${runId}] Shopping list created with ${shoppingList.getAllItems().length} items.`);
-    await sendRunStarted(runId, shoppingList.getAllItems().length); // Send start notification
 
     // Initialize Stagehand
-    const config = configFromEnv(USE_LOCAL_BROWSER);
-    const stagehand = await initializeStagehand(config);
-
+    console.log(`[DEBUG ${runId}] About to initialize Stagehand with config: ${USE_LOCAL_BROWSER ? 'LOCAL' : 'BROWSERBASE'}`);
+    await sendError(runId, `DEBUG: Initializing Stagehand (${USE_LOCAL_BROWSER ? 'LOCAL' : 'BROWSERBASE'})...`);
+    
     try {
-        // Login
-        if (TARGET_USERNAME && TARGET_PASSWORD) {
-            const loginSuccessful = await loginToTarget(stagehand, TARGET_USERNAME, TARGET_PASSWORD);
-            console.log(`[ProcessList ${runId}] Target login attempt: ${loginSuccessful ? 'Success' : 'Failed/Skipped'}`);
-        }
+        const config = configFromEnv(USE_LOCAL_BROWSER);
+        console.log(`[DEBUG ${runId}] Stagehand config created`);
+        await sendError(runId, `DEBUG: Stagehand config created, about to initialize browser...`);
+        
+        const stagehand = await initializeStagehand(config);
+        console.log(`[DEBUG ${runId}] Stagehand initialized successfully`);
+        await sendError(runId, `DEBUG: Stagehand initialized successfully!`);
 
-        // Process items
-        const items = shoppingList.getAllItems();
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            console.log(`[ProcessList ${runId}] Processing item ${i + 1}/${items.length}: ${item.name}`);
-            if (item.status !== ProductStatus.PENDING) continue; // Skip already processed
-
-            const result = await searchAndAddToCart(stagehand, item.name);
-            shoppingList.updateStatus(i, result.status, result.message);
-
-            if (result.status === ProductStatus.ADDED) {
-                recordItemSuccess(runId);
-                await sendItemAdded(runId, item.name, i + 1, items.length);
+        try {
+            // Login
+            if (TARGET_USERNAME && TARGET_PASSWORD) {
+                console.log(`[DEBUG ${runId}] Attempting login with username: ${TARGET_USERNAME.substring(0, 3)}...`);
+                await sendError(runId, `DEBUG: Attempting login with username: ${TARGET_USERNAME.substring(0, 3)}...`);
+                
+                const loginSuccessful = await loginToTarget(stagehand, TARGET_USERNAME, TARGET_PASSWORD);
+                console.log(`[ProcessList ${runId}] Target login attempt: ${loginSuccessful ? 'Success' : 'Failed/Skipped'}`);
+                await sendError(runId, `DEBUG: Login result: ${loginSuccessful ? 'Success' : 'Failed'}`);
             } else {
-                recordItemFailure(runId, result.message || 'Unknown error');
-                await sendItemFailed(runId, item.name, result.message || 'Unknown error');
+                console.warn(`[DEBUG ${runId}] No Target credentials provided, skipping login`);
+                await sendError(runId, `DEBUG: No Target credentials provided, skipping login`);
             }
-            console.log(`[ProcessList ${runId}] Item ${item.name} status: ${result.status}`);
+
+            // Process items
+            const items = shoppingList.getAllItems();
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                console.log(`[ProcessList ${runId}] Processing item ${i + 1}/${items.length}: ${item.name}`);
+                await sendError(runId, `DEBUG: Processing item ${i + 1}/${items.length}: ${item.name}`);
+                
+                if (item.status !== ProductStatus.PENDING) continue; // Skip already processed
+
+                console.log(`[DEBUG ${runId}] About to call searchAndAddToCart for ${item.name}`);
+                const result = await searchAndAddToCart(stagehand, item.name);
+                console.log(`[DEBUG ${runId}] searchAndAddToCart returned: ${result.status}, message: ${result.message}`);
+                
+                shoppingList.updateStatus(i, result.status, result.message);
+
+                if (result.status === ProductStatus.ADDED) {
+                    recordItemSuccess(runId);
+                    await sendItemAdded(runId, item.name, i + 1, items.length);
+                } else {
+                    recordItemFailure(runId, result.message || 'Unknown error');
+                    await sendItemFailed(runId, item.name, result.message || 'Unknown error');
+                }
+                console.log(`[ProcessList ${runId}] Item ${item.name} status: ${result.status}`);
+            }
+
+            // Finalize run
+            const summary = shoppingList.getSummary();
+            console.log(`[ProcessList ${runId}] Shopping complete. Added ${summary.added}/${summary.total}.`);
+            updateRunStatus(runId, 'cart_ready');
+            await sendCartReady(runId, summary.added, summary.total);
+
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const stackTrace = error instanceof Error ? error.stack : 'No stack trace';
+            
+            console.error(`[ProcessList ${runId}] Error during processing:`, error);
+            
+            // Send a much more detailed error to Slack
+            await sendError(runId, `DETAILED ERROR: ${errorMessage}\n\nStack trace: ${stackTrace}`);
+            
+            updateRunStatus(runId, 'processing_failed');
+        } finally {
+            await stagehand.close();
+            console.log(`[ProcessList ${runId}] Stagehand closed.`);
         }
-
-        // Finalize run
-        const summary = shoppingList.getSummary();
-        console.log(`[ProcessList ${runId}] Shopping complete. Added ${summary.added}/${summary.total}.`);
-        updateRunStatus(runId, 'cart_ready');
-        await sendCartReady(runId, summary.added, summary.total);
-
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`[ProcessList ${runId}] Error during processing:`, error);
+        const stackTrace = error instanceof Error ? error.stack : 'No stack trace';
+        
+        console.error(`[ProcessList ${runId}] CRITICAL: Stagehand initialization error:`, error);
+        await sendError(runId, `CRITICAL: Stagehand initialization failed: ${errorMessage}\n\nStack trace: ${stackTrace}`);
         updateRunStatus(runId, 'processing_failed');
-        await sendError(runId, `Processing error: ${errorMessage}`);
-    } finally {
-        await stagehand.close();
-        console.log(`[ProcessList ${runId}] Stagehand closed.`);
     }
 
     // Final log

@@ -1,6 +1,6 @@
 import { Stagehand } from '@browserbasehq/stagehand';
 import dotenv from 'dotenv';
-import { sendRunStarted, sendItemAdded, sendItemFailed, sendCartReady, sendError, sendSlackUpdate } from './slack';
+import { sendRunStarted, sendItemAdded, sendItemFailed, sendCartReady, sendError, sendCheckoutComplete, sendCheckoutFailed, sendCheckoutInitiated } from './slack';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
@@ -179,6 +179,7 @@ export async function processCheckout(runId: string): Promise<boolean> {
   // Update run status
   updateRunStatus(runId, 'checkout_started');
   console.log(`Updated run ${runId} status to: checkout_started`);
+  await sendCheckoutInitiated(runId);
 
   // For now, we'll simulate the checkout process
   // In the real implementation, this would use Stagehand with BrowserBase
@@ -190,9 +191,6 @@ export async function processCheckout(runId: string): Promise<boolean> {
     // Generate a random order total
     const total = `$${(Math.random() * 100 + 20).toFixed(2)}`;
     console.log(`Order ready for final confirmation. Total: ${total}`);
-    
-    // Send notification before final confirmation
-    await sendSlackUpdate(runId, `✅ Order ready for final confirmation. Total: ${total}. Proceeding with checkout...`);
     
     // Simulate final checkout step
     await simulateDelay(2000, 5000);
@@ -209,7 +207,7 @@ export async function processCheckout(runId: string): Promise<boolean> {
       console.log(`Updated run ${runId} status to: checkout_complete`);
       
       // Send success notification
-      await sendSlackUpdate(runId, `✅ Checkout completed successfully! Order number: ${orderNumber}`);
+      await sendCheckoutComplete(runId);
       
       return true;
     } else {
@@ -218,7 +216,7 @@ export async function processCheckout(runId: string): Promise<boolean> {
       console.log(`Updated run ${runId} status to: checkout_failed`);
       
       const errorMessage = 'Checkout failed: ' + getRandomFailureReason();
-      await sendError(runId, errorMessage);
+      await sendCheckoutFailed(runId, errorMessage);
       
       return false;
     }

@@ -1,7 +1,6 @@
 import { Stagehand } from "@browserbasehq/stagehand";
 import { updateRunStatus } from "../src/run_manager"; // Adjust path relative to utils
-import { sendSlackUpdate, sendError } from "../src/slack"; // Uncommented Slack import
-// import { sendSlackUpdate, sendError } from "../src/slack"; // Uncomment when Slack is ready
+import { sendError, sendCheckoutComplete, sendCheckoutFailed, sendSlackMessage } from "../src/slack"; 
 
 /**
  * Payment details interface for checkout process
@@ -43,7 +42,6 @@ export async function processCheckout(
   // Ensure status is checkout_started (redundant check, server should handle)
   // updateRunStatus(runId, 'checkout_started'); 
   console.log(`[Checkout ${runId}] Starting checkout process...`);
-  await sendSlackUpdate(runId, "🚀 Starting checkout..."); // Uncommented for Slack
 
   try {
     // Navigate to cart
@@ -150,13 +148,12 @@ export async function processCheckout(
       await stagehand.page.waitForTimeout(5000);
       console.log(`[Checkout ${runId}] Order placed successfully!`);
       updateRunStatus(runId, 'checkout_complete');
-      await sendSlackUpdate(runId, "✅ Order placed successfully!"); // Uncommented for Slack
+      await sendCheckoutComplete(runId); 
     } else {
       console.log(`[Checkout ${runId}] Order not completed (COMPLETE_ORDER=false)`);
       console.log(`[Checkout ${runId}] Checkout process stopped before placing the order`);
-      // Set status to complete even if order wasn't placed, as the process finished as intended
       updateRunStatus(runId, 'checkout_complete'); 
-      await sendSlackUpdate(runId, "✅ Checkout simulation complete (order not placed)."); // Uncommented for Slack
+      await sendSlackMessage(`[Run ${runId}] ✅ Checkout simulation complete (order not placed).`); 
     }
     
     return true;
@@ -164,7 +161,7 @@ export async function processCheckout(
     console.error(`[Checkout ${runId}] Error during checkout:`, error);
     updateRunStatus(runId, 'checkout_failed');
     const errorMsg = error instanceof Error ? error.message : "Unknown checkout error";
-    await sendError(runId, `Checkout failed: ${errorMsg}`); // Uncommented for Slack
+    await sendCheckoutFailed(runId, errorMsg); 
     return false;
   }
 } 

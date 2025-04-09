@@ -28,7 +28,7 @@ if (slackToken) {
     logger.warn('SLACK_BOT_TOKEN not found. Slack notifications will be disabled.');
 }
 
-async function sendSlackMessage(message: string) {
+export async function sendSlackMessage(message: string) {
     // Use the single configured targetChannelId
     if (!client) {
         logger.warn(`Slack notification skipped (client not initialized): ${message}`);

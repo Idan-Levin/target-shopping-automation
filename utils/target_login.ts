@@ -13,6 +13,7 @@ const logger = {
 /**
  * Logs in to the Target account using provided credentials.
  * Updated for multi-step login (Email -> Continue -> Password -> Sign In).
+ * Includes check for common error messages after clicking Continue.
  * @param stagehand - The Stagehand instance.
  * @param username - The Target username (email).
  * @param password - The Target password.
@@ -45,8 +46,24 @@ export async function loginToTarget(stagehand: Stagehand, username: string, pass
         await page.click(continueButtonSelector);
         logger.info('Clicked Continue button.');
 
+        // --- Step 2.5: Check for IMMEDIATE errors before waiting for password --- 
+        logger.info('Checking for immediate error message after Continue...');
+        const errorSelector = '[data-test*="error" i], [role="alert"], .alert-danger, #error-message'; // Combine likely error selectors
+        try {
+            // Wait briefly for a potential error message to appear
+            const errorElement = await page.locator(errorSelector).first(); // Look for the first match
+            await errorElement.waitFor({ state: 'visible', timeout: 5000 }); // Wait up to 5s for error
+            const errorText = await errorElement.textContent();
+            logger.error(`Login failed: Immediate error message found after clicking Continue: ${errorText?.trim()}`);
+            return false; // Fail fast if error is detected
+        } catch (e) {
+            // No immediate error found, proceed to wait for password field
+            logger.info('No immediate error message detected. Proceeding to password step...');
+        }
+
         // --- Step 3: Enter Password --- 
         const passwordSelector = '#password'; // Common ID for password input
+        logger.info('Waiting for password field...');
         await page.waitForSelector(passwordSelector, { timeout: 15000 });
         logger.info('Password field located');
         await page.type(passwordSelector, password);
@@ -58,21 +75,22 @@ export async function loginToTarget(stagehand: Stagehand, username: string, pass
         await page.click(signInButtonSelector);
         logger.info('Clicked Sign In button.');
 
-        // --- Step 5: Verify Login Success --- 
-        logger.info('Waiting for navigation after login...');
+        // --- Step 5: Verify Login Success (using Sign Out button) --- 
+        logger.info('Waiting for Sign Out button as logged-in indicator...');
         try {
-            await page.waitForURL((url) => !url.pathname.includes('/account'), { timeout: 20000 });
-            logger.info('Login appears successful (navigated away from account page).');
+            const signOutSelector = 'button:has-text("Sign out")'; // Selector for the sign out button
+            await page.waitForSelector(signOutSelector, { timeout: 20000, state: 'visible' });
+            logger.info('Login successful: Found Sign Out button.');
             return true;
         } catch (e) {
-            logger.error(`Login failed: Did not navigate away from account page or indicator not found. Error: ${e}`);
+            logger.error(`Login failed: Sign Out button not found within timeout. Error: ${e}`);
             const errorElementSelector = '[data-test="error-message-list"]';
             try {
                  const errorText = await page.locator(errorElementSelector).textContent({ timeout: 2000 });
                  if (errorText) {
-                     logger.error(`Login page error message: ${errorText.trim()}`);
+                     logger.error(`Login page error message after Sign In attempt: ${errorText.trim()}`);
                  }
-            } catch { /* Ignore if error element not found */ }
+            } catch { /* Ignore */ }
             return false;
         }
 
